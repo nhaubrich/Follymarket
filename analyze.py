@@ -41,7 +41,7 @@ for market in data:
         #prices+=random.choices([p["p"] for p in market["prices"]],k=pricesPerMarket)
         prices+=listOfPrices
         priceList.append(listOfPrices[::-1])
-        durations.append(len(listOfPrices))
+        durations.append(len(listOfPrices)*1/6)
         maxMarketLength=max(maxMarketLength,len(listOfPrices))
 
 
@@ -100,11 +100,41 @@ def quantileBootstrap(data, draws):
     #pdb.set_trace()
     return np.abs(np.vstack((lower,upper)))
 
+def flatten(listOfLists):
+    return [e for l in listOfLists for e in l]
+
+def quantileBootstrapMarkets(priceList, draws):
+    N = len(priceList)
+    
+    ratios, midpoints = computeAccuracy(flatten(priceList))
+    bootstraps = np.zeros((draws,len(midpoints)))
+
+    block = 100
+    for i in range(0,draws,block):
+        print(i)
+        #samples = np.random.choice(data,size=(min(block,draws-i),N))
+
+        #choose indices of markets
+        sampleIdxs = np.random.randint(0,N,size=(min(block,draws-i),N))
+        
+
+        for j,sampleIdx in enumerate(sampleIdxs):
+            sample = [priceList[idx] for idx in sampleIdx]
+            ratios_draw,_ = computeAccuracy(flatten(sample))
+            bootstraps[i+j] = ratios_draw
+            #sum_squared_variation += (ratios_draw-ratios)**2
+    
+    lower,upper = np.quantile(bootstraps,[0.16,0.84],axis=0)-ratios
+    #pdb.set_trace()
+    return np.abs(np.vstack((lower,upper)))
 
 print("longest market: {}".format(maxMarketLength))
+
+#bootstrap markets, not individual prices, due to correlations
 ratios,midpoints = computeAccuracy(prices)
 #bin_errors = bootstrap(prices,50)
-errors = quantileBootstrap(prices,50)
+#errors = quantileBootstrap(prices,50)
+errors = quantileBootstrapMarkets(priceList,2)
 plt.errorbar(midpoints,ratios,yerr=errors)
 print(errors)
 #plt.scatter(midpoints,ratios)
@@ -113,11 +143,11 @@ plt.plot([0,1],[0,1],linestyle='dashed',color='green')
 plt.xlabel("Market Probability")
 plt.ylabel("Outcome Frequency")
 plt.savefig("plots/calibration.png")
-#plt.show()
+plt.show()
 plt.clf()
 
 plt.hist(durations,histtype='step',bins=100)
-plt.xlabel("Duration (h)")
+plt.xlabel("Market duration (h)")
 plt.savefig("plots/duration.png")
 #plt.show()
 plt.clf()
@@ -134,8 +164,8 @@ plt.clf()
 #e.g. average price X time apart
 
 means = []
-uppers = []
-lowers = []
+uppers, lowers = [],[]
+upper2sigs, lower2sigs = [],[]
 stds = []
 timestamps = [x for x in range(0,maxMarketLength,1)]
 #timestamps are 600s apart
@@ -144,22 +174,30 @@ for time in timestamps:
     means.append(np.mean(prices))
 
     lower,upper = np.quantile(prices,[0.16,0.84])-means[-1]
+    lower2sig,upper2sig = np.quantile(prices,[0.022,0.978])-means[-1]
     uppers.append(upper)
     lowers.append(lower)
+    upper2sigs.append(upper2sig)
+    lower2sigs.append(lower2sig)
     stds.append(np.std(prices,ddof=1))
 
 errors = np.abs(np.vstack((np.array(lowers),np.array(uppers))))
+
+error2sig = np.abs(np.vstack((np.array(lower2sigs),np.array(upper2sigs))))
 stds = np.nan_to_num(np.array(stds),nan=1)
 times = [x*1/6 for x in timestamps]
 #plt.scatter(times,means)
 #plt.errorbar(times,means,yerr=errors,color='cyan')
 
-plt.fill_between(times,means-errors[0],means+errors[1],color='green',alpha=0.3)
+plt.plot(times,means,color='green',label=' Mean')
+plt.fill_between(times,means-error2sig[0],means+error2sig[1],color='green',alpha=0.3,label=r"$\pm2\sigma$")
+plt.fill_between(times,means-errors[0],means+errors[1],color='green',alpha=0.3,label="$\pm1\sigma$")
 #plt.fill_between(times,means-stds,means+stds,color='green',alpha=0.3)
-plt.plot(times,means,color='green')
+leg = plt.legend()
+leg.legend_handles[1].set_alpha(0.6)
 plt.ylim(0,1)
-plt.xlabel("time before market resolved (hours)")
-plt.ylabel("average prediction")
+plt.xlabel("Time before market resolution (hours)")
+plt.ylabel("Price")
 plt.savefig("plots/accuracy.png")
 plt.show()
 
