@@ -61,7 +61,7 @@ for market in data:
             plt.clf()
 
 def computeAccuracy(prices):
-    h,bins=np.histogram(prices,range=(0,1),bins=101)
+    h,bins=np.histogram(prices,range=(0,1),bins=51)
     midpoints = 0.5*(bins[:-1]+bins[1:])
     ratios = h/(h+h[::-1])
     return ratios,midpoints
@@ -134,7 +134,7 @@ print("longest market: {}".format(maxMarketLength))
 ratios,midpoints = computeAccuracy(prices)
 #bin_errors = bootstrap(prices,50)
 #errors = quantileBootstrap(prices,50)
-errors = quantileBootstrapMarkets(priceList,2)
+errors = quantileBootstrapMarkets(priceList,500)
 plt.errorbar(midpoints,ratios,yerr=errors)
 print(errors)
 #plt.scatter(midpoints,ratios)
@@ -143,7 +143,7 @@ plt.plot([0,1],[0,1],linestyle='dashed',color='green')
 plt.xlabel("Market Probability")
 plt.ylabel("Outcome Frequency")
 plt.savefig("plots/calibration.png")
-plt.show()
+#plt.show()
 plt.clf()
 
 plt.hist(durations,histtype='step',bins=100)
@@ -163,41 +163,74 @@ plt.clf()
 #do accuracy at different time intervals (absolute and relative)
 #e.g. average price X time apart
 
-means = []
-uppers, lowers = [],[]
-upper2sigs, lower2sigs = [],[]
-stds = []
-timestamps = [x for x in range(0,maxMarketLength,1)]
-#timestamps are 600s apart
-for time in timestamps:
-    prices = [price[time] for price in priceList if time<len(price)]
-    means.append(np.mean(prices))
+def plotAccuracy(priceList ):
+    means = []
+    uppers, lowers = [],[]
+    upper2sigs, lower2sigs = [],[]
+    timestamps = [x for x in range(0,maxMarketLength,10)]
+    #timestamps are 600s apart
+    for time in timestamps:
+        prices = [price[time] for price in priceList if time<len(price)]
+        means.append(np.mean(prices))
 
-    lower,upper = np.quantile(prices,[0.16,0.84])-means[-1]
-    lower2sig,upper2sig = np.quantile(prices,[0.022,0.978])-means[-1]
-    uppers.append(upper)
-    lowers.append(lower)
-    upper2sigs.append(upper2sig)
-    lower2sigs.append(lower2sig)
-    stds.append(np.std(prices,ddof=1))
+        lower,upper = np.quantile(prices,[0.16,0.84])-means[-1]
+        lower2sig,upper2sig = np.quantile(prices,[0.022,0.978])-means[-1]
+        uppers.append(upper)
+        lowers.append(lower)
+        upper2sigs.append(upper2sig)
+        lower2sigs.append(lower2sig)
 
-errors = np.abs(np.vstack((np.array(lowers),np.array(uppers))))
+    errors = np.abs(np.vstack((np.array(lowers),np.array(uppers))))
 
-error2sig = np.abs(np.vstack((np.array(lower2sigs),np.array(upper2sigs))))
-stds = np.nan_to_num(np.array(stds),nan=1)
-times = [x*1/6 for x in timestamps]
-#plt.scatter(times,means)
-#plt.errorbar(times,means,yerr=errors,color='cyan')
+    error2sig = np.abs(np.vstack((np.array(lower2sigs),np.array(upper2sigs))))
+    times = [x*1/6 for x in timestamps]
+    #plt.scatter(times,means)
+    #plt.errorbar(times,means,yerr=errors,color='cyan')
 
-plt.plot(times,means,color='green',label=' Mean')
-plt.fill_between(times,means-error2sig[0],means+error2sig[1],color='green',alpha=0.3,label=r"$\pm2\sigma$")
-plt.fill_between(times,means-errors[0],means+errors[1],color='green',alpha=0.3,label="$\pm1\sigma$")
-#plt.fill_between(times,means-stds,means+stds,color='green',alpha=0.3)
-leg = plt.legend()
-leg.legend_handles[1].set_alpha(0.6)
-plt.ylim(0,1)
-plt.xlabel("Time before market resolution (hours)")
-plt.ylabel("Price")
-plt.savefig("plots/accuracy.png")
-plt.show()
+    plt.plot(times,means,color='green',label=' Mean')
+    plt.fill_between(times,means-errors[0],means+errors[1],color='green',alpha=0.3,label="$\pm1\sigma$")
+    plt.fill_between(times,means-error2sig[0],means+error2sig[1],color='green',alpha=0.3,label=r"$\pm2\sigma$")
+    leg = plt.legend()
+    leg.legend_handles[1].set_alpha(0.6)
+    plt.ylim(0,1)
+    plt.xlabel("Time before market resolution (hours)")
+    plt.ylabel("Price")
+    plt.savefig("plots/accuracy.png")
+    plt.show()
 
+def plotAccuracyRelative(priceList ):
+    means = []
+    uppers, lowers = [],[]
+    upper2sigs, lower2sigs = [],[]
+    resolution=100
+    timestamps = [x/resolution for x in range(0,resolution)]
+    print(timestamps)
+    
+    for time in timestamps:
+        prices = [price[min(round(time*len(price)),len(price)-1)] for price in priceList]
+        means.append(np.mean(prices))
+
+        lower,upper = np.quantile(prices,[0.16,0.84])-means[-1]
+        lower2sig,upper2sig = np.quantile(prices,[0.022,0.978])-means[-1]
+        uppers.append(upper)
+        lowers.append(lower)
+        upper2sigs.append(upper2sig)
+        lower2sigs.append(lower2sig)
+
+    errors = np.abs(np.vstack((np.array(lowers),np.array(uppers))))
+
+    error2sig = np.abs(np.vstack((np.array(lower2sigs),np.array(upper2sigs))))
+
+    plt.plot(timestamps,means,color='green',label=' Mean')
+    plt.fill_between(timestamps,means-errors[0],means+errors[1],color='green',alpha=0.3,label="$\pm1\sigma$")
+    plt.fill_between(timestamps,means-error2sig[0],means+error2sig[1],color='green',alpha=0.3,label=r"$\pm2\sigma$")
+    leg = plt.legend()
+    leg.legend_handles[1].set_alpha(0.6)
+    plt.ylim(0,1)
+    plt.xlabel("Time before market resolves (%)")
+    plt.ylabel("Price")
+    plt.savefig("plots/accuracy_relative.png")
+    plt.show()
+
+plotAccuracy(priceList,rel)
+plotAccuracyRelative(priceList)
