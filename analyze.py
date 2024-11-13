@@ -34,13 +34,15 @@ prices = []
 pricesPerMarket = 10000
 priceList = []
 maxMarketLength = 0
+volumeList = []
 
 for market in data:
-    if len(market["prices"])>0:
+    if len(market["prices"])>0 and "volume" in market:
         listOfPrices = [p["p"] for p in market["prices"]]
         #prices+=random.choices([p["p"] for p in market["prices"]],k=pricesPerMarket)
         prices+=listOfPrices
         priceList.append(listOfPrices[::-1])
+        volumeList.append(float(market["volume"]))
         durations.append(len(listOfPrices)*1/6)
         maxMarketLength=max(maxMarketLength,len(listOfPrices))
 
@@ -132,12 +134,12 @@ print("longest market: {}".format(maxMarketLength))
 
 #bootstrap markets, not individual prices, due to correlations
 ratios,midpoints = computeAccuracy(prices)
-#bin_errors = bootstrap(prices,50)
 #errors = quantileBootstrap(prices,50)
-errors = quantileBootstrapMarkets(priceList,500)
-plt.errorbar(midpoints,ratios,yerr=errors)
-print(errors)
-#plt.scatter(midpoints,ratios)
+
+#errors = quantileBootstrapMarkets(priceList,5)
+#plt.errorbar(midpoints,ratios,yerr=errors)
+
+plt.scatter(midpoints,ratios)
 
 plt.plot([0,1],[0,1],linestyle='dashed',color='green')
 plt.xlabel("Market Probability")
@@ -152,16 +154,11 @@ plt.savefig("plots/duration.png")
 #plt.show()
 plt.clf()
 
-#so, this gives tiny error bars. Alternatives:
-#Resample markets, not individual time points
-#use median instead of all times
 
 #predictit investigation https://researchers.one/articles/18.11.00005.pdf
 #brier score (MSE), do it daily? https://en.wikipedia.org/wiki/Brier_score
 #brier score with many markets and varying timespans https://dspace.mit.edu/bitstream/handle/1721.1/155928/3643562.3672612.pdf?sequence=1
 
-#do accuracy at different time intervals (absolute and relative)
-#e.g. average price X time apart
 
 def plotAccuracy(priceList ):
     means = []
@@ -196,7 +193,8 @@ def plotAccuracy(priceList ):
     plt.xlabel("Time before market resolution (hours)")
     plt.ylabel("Price")
     plt.savefig("plots/accuracy.png")
-    plt.show()
+    #plt.show()
+    plt.clf()
 
 def plotAccuracyRelative(priceList ):
     means = []
@@ -230,7 +228,35 @@ def plotAccuracyRelative(priceList ):
     plt.xlabel("Time before market resolves (%)")
     plt.ylabel("Price")
     plt.savefig("plots/accuracy_relative.png")
-    plt.show()
+    #plt.show()
+    plt.clf()
 
-plotAccuracy(priceList,rel)
+plotAccuracy(priceList)
 plotAccuracyRelative(priceList)
+
+#does volume have an impact? brier score (MSE) vs volume
+#maybe weight above plots by volume?
+
+#volume follows log-normal
+plt.hist(np.log(volumeList),bins=100,histtype='step')
+plt.xlabel("log(volume)")
+plt.savefig("plots/volume.png")
+#plt.show()
+plt.clf()
+
+brierPerMarket = []
+BCE = [] 
+for price in priceList:
+    brierPerMarket.append(float(((1-np.array(price))**2).sum()/len(price)))
+    BCE.append( -np.log(price).mean())
+
+plt.hist(brierPerMarket,bins=100,histtype='step')
+plt.savefig("plots/brier.png")
+plt.clf()
+
+
+plt.scatter(np.log(volumeList),BCE)
+plt.yscale("log")
+#plt.scatter(volumeList,brierPerMarket)
+plt.show()
+#need to see quantiles of this to assess effect
