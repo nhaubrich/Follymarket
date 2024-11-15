@@ -5,6 +5,7 @@ import random
 import datetime
 import matplotlib.dates as mdates
 import pdb
+import scipy
 
 majors = mdates.DateFormatter('%d')
 minors = mdates.DateFormatter('%h')
@@ -55,12 +56,27 @@ for market in data:
             times = [datetime.datetime.utcfromtimestamp(t['t']) for t in market['prices']]
 
             plt.plot(times,listOfPrices)
+            plt.xlabel("Time")
+            plt.ylabel("Price")
             plt.gcf().autofmt_xdate()
             plt.title(market['slug']+"\n min prob: {:.3f}     median prob: {:.3f}".format(min(listOfPrices),median))
             plt.savefig("plots/folly_{}.png".format(market['slug']))
             #plt.show()
             #pdb.set_trace()
             plt.clf()
+
+        #Too many! 
+        #if  median>0.95:
+        #    print(" ".join([market["outcomes"],market["result"],str(market["prices"][-1]['p']),market["outcomePrices"],market["slug"]]))
+        #    times = [datetime.datetime.utcfromtimestamp(t['t']) for t in market['prices']]
+
+        #    plt.plot(times,listOfPrices)
+        #    plt.gcf().autofmt_xdate()
+        #    plt.title(market['slug']+"\n min prob: {:.3f}     median prob: {:.3f}".format(min(listOfPrices),median))
+        #    plt.savefig("plots/glory_{}.png".format(market['slug']))
+        #    #plt.show()
+        #    #pdb.set_trace()
+        #    plt.clf()
 
 def computeAccuracy(prices):
     h,bins=np.histogram(prices,range=(0,1),bins=51)
@@ -132,20 +148,25 @@ def quantileBootstrapMarkets(priceList, draws):
 
 print("longest market: {}".format(maxMarketLength))
 
+
+#TODO: weight calibration by inverse market duration
 #bootstrap markets, not individual prices, due to correlations
 ratios,midpoints = computeAccuracy(prices)
 #errors = quantileBootstrap(prices,50)
 
-#errors = quantileBootstrapMarkets(priceList,5)
+errors = quantileBootstrapMarkets(priceList,500)
 #plt.errorbar(midpoints,ratios,yerr=errors)
 
-plt.scatter(midpoints,ratios)
+plt.plot(midpoints,ratios)
+plt.fill_between(midpoints,ratios-errors[0],ratios+errors[1],color='blue',alpha=0.3,label="$\pm1\sigma$")
+
 
 plt.plot([0,1],[0,1],linestyle='dashed',color='green')
-plt.xlabel("Market Probability")
+plt.title("Polymarket Calibration")
+plt.xlabel("Market Price")
 plt.ylabel("Outcome Frequency")
 plt.savefig("plots/calibration.png")
-#plt.show()
+plt.show()
 plt.clf()
 
 plt.hist(durations,histtype='step',bins=100)
@@ -255,8 +276,33 @@ plt.savefig("plots/brier.png")
 plt.clf()
 
 
+
+class Percentile:
+    def __init__(self,percentile):
+        self.percentile = percentile
+    def __call__(self,values):
+        return np.quantile(values,self.percentile) 
+
+def upperQuantile(values):
+    return np.quantile(values,0.84)
+
+bins=50
+means,_,_ = scipy.stats.binned_statistic(np.log(volumeList),BCE,statistic='mean',bins=bins)
+upper,edges,_ = scipy.stats.binned_statistic(np.log(volumeList),BCE,statistic=Percentile(0.84),bins=bins)
+lower,_,_ = scipy.stats.binned_statistic(np.log(volumeList),BCE,statistic=Percentile(0.16),bins=bins)
+
+
+
+midpoints =  0.5*(edges[:-1]+edges[1:])
 plt.scatter(np.log(volumeList),BCE)
-plt.yscale("log")
+plt.plot(midpoints,means,color='orange')
+
+plt.fill_between(midpoints,lower,upper,color='orange',alpha=0.3,label=r"$\pm1\sigma$")
+
+m,b = np.polyfit(np.log(volumeList),BCE,1)
+plt.plot(midpoints,midpoints*m+b)
+#plt.yscale("log")
 #plt.scatter(volumeList,brierPerMarket)
+print("Doubling volume corresponds to {:.3f} more bits".format(m))
 plt.show()
 #need to see quantiles of this to assess effect
