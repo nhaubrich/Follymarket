@@ -78,8 +78,19 @@ for market in data:
         #    #pdb.set_trace()
         #    plt.clf()
 
+def flatten(listOfLists):
+    return [e for l in listOfLists for e in l]
+
 def computeAccuracy(prices):
     h,bins=np.histogram(prices,range=(0,1),bins=51)
+    midpoints = 0.5*(bins[:-1]+bins[1:])
+    ratios = h/(h+h[::-1])
+    return ratios,midpoints
+
+def computeWeightedAccuracy(priceList):
+    #weight markets by inverse length
+    weights = [[1/len(x)]*len(x) for x in priceList]
+    h,bins=np.histogram(flatten(priceList),range=(0,1),bins=51,weights=flatten(weights))
     midpoints = 0.5*(bins[:-1]+bins[1:])
     ratios = h/(h+h[::-1])
     return ratios,midpoints
@@ -115,16 +126,15 @@ def quantileBootstrap(data, draws):
             #sum_squared_variation += (ratios_draw-ratios)**2
     
     lower,upper = np.quantile(bootstraps,[0.16,0.84],axis=0)-ratios
-    #pdb.set_trace()
     return np.abs(np.vstack((lower,upper)))
 
-def flatten(listOfLists):
-    return [e for l in listOfLists for e in l]
 
-def quantileBootstrapMarkets(priceList, draws):
+def quantileBootstrapMarkets(priceList, draws, weightByLength=False):
     N = len(priceList)
-    
-    ratios, midpoints = computeAccuracy(flatten(priceList))
+    if not weightByLength: 
+        ratios, midpoints = computeAccuracy(flatten(priceList))
+    else:
+        ratios, midpoints = computeWeightedAccuracy(priceList)
     bootstraps = np.zeros((draws,len(midpoints)))
 
     block = 100
@@ -135,38 +145,42 @@ def quantileBootstrapMarkets(priceList, draws):
         #choose indices of markets
         sampleIdxs = np.random.randint(0,N,size=(min(block,draws-i),N))
         
-
         for j,sampleIdx in enumerate(sampleIdxs):
             sample = [priceList[idx] for idx in sampleIdx]
-            ratios_draw,_ = computeAccuracy(flatten(sample))
+            if not weightByLength:
+                ratios_draw,_ = computeAccuracy(flatten(sample))
+            else:
+                ratios_draw,_ = computeWeightedAccuracy(sample)
+
             bootstraps[i+j] = ratios_draw
             #sum_squared_variation += (ratios_draw-ratios)**2
     
     lower,upper = np.quantile(bootstraps,[0.16,0.84],axis=0)-ratios
-    #pdb.set_trace()
     return np.abs(np.vstack((lower,upper)))
+
 
 print("longest market: {}".format(maxMarketLength))
 
+#TODO?: percentile bootstrap to BCa file:///home/nick/Downloads/casi_corrected_03052021.pdf#page=212
+#t_dot is average of statistic over jackknife samples
+#a=1/6*(sum( (t_i - t_dot )^3) )/(sum((t_i-t_dot)^2)^1.5
+#G(alpha) is proportion of bootstrap samples below alpha
+#z_0 = Phi^-1( p0 ) i.e. p0 is proportion of bootstrapped samples below original estimate t
+#t_bca = G^-1 ( Phi( z_0 + (z_0 + z_alpha)/(1-a(z_0+z_alpha))))
 
-#TODO: weight calibration by inverse market duration
-#bootstrap markets, not individual prices, due to correlations
+N_bootstraps=1
 ratios,midpoints = computeAccuracy(prices)
-#errors = quantileBootstrap(prices,50)
-
-errors = quantileBootstrapMarkets(priceList,500)
+errors = quantileBootstrapMarkets(priceList,N_bootstraps)
 #plt.errorbar(midpoints,ratios,yerr=errors)
 
 plt.plot(midpoints,ratios)
 plt.fill_between(midpoints,ratios-errors[0],ratios+errors[1],color='blue',alpha=0.3,label="$\pm1\sigma$")
 
-
 plt.plot([0,1],[0,1],linestyle='dashed',color='green')
 plt.title("Polymarket Calibration")
 plt.xlabel("Market Price")
 plt.ylabel("Outcome Frequency")
-plt.savefig("plots/calibration.png")
-plt.show()
+plt.savefig("plots/calibration_unweighted.png")
 plt.clf()
 
 plt.hist(durations,histtype='step',bins=100)
@@ -175,6 +189,21 @@ plt.savefig("plots/duration.png")
 #plt.show()
 plt.clf()
 
+
+# calibration weighted by inverse market duration
+ratios,midpoints = computeWeightedAccuracy(priceList)
+errors = quantileBootstrapMarkets(priceList,N_bootstraps,weightByLength=True)
+
+plt.plot(midpoints,ratios)
+plt.fill_between(midpoints,ratios-errors[0],ratios+errors[1],color='blue',alpha=0.3,label="$\pm1\sigma$")
+
+plt.plot([0,1],[0,1],linestyle='dashed',color='green')
+plt.title("Polymarket Calibration")
+plt.xlabel("Market Price")
+plt.ylabel("Outcome Frequency")
+plt.savefig("plots/calibration_weightByLength.png")
+#plt.show()
+plt.clf()
 
 #predictit investigation https://researchers.one/articles/18.11.00005.pdf
 #brier score (MSE), do it daily? https://en.wikipedia.org/wiki/Brier_score
