@@ -82,8 +82,6 @@ for i,market in enumerate(markets):
     trueClob = -1
     #hmm, this gives the price of no
     for outcome,price,clob in zip(outcomes,outcomePrices,clobs):
-        #endprice = float(price)
-        #if round(endprice)==1:
         if price=="1":
             result=outcome
             trueClob = clob
@@ -93,7 +91,7 @@ for i,market in enumerate(markets):
     if result!=-1:
         if trueClob not in priceDict:
             fetches+=1
-            print("fetching {}".format(market['slug']))
+            print("\033[92mfetching {}\033[0m".format(market['slug']))
             priceDict[trueClob] = getPrice(trueClob)
             time.sleep(1)
             if fetches%60==0:

@@ -159,7 +159,36 @@ def quantileBootstrapMarkets(priceList, draws, weightByLength=False):
     return np.abs(np.vstack((lower,upper)))
 
 
+def getBrierScore(priceList,weighted=False):
+    if not weighted:
+        prices = np.array(flatten(priceList))
+        return ((prices-1)**2).mean()
+    else:
+        #weight each market by inverse of length
+        MSE=0
+        for prices in priceList:
+            prices = np.array(prices)
+            MSE+= ((prices-1)**2).mean()
+        return MSE/len(priceList)
+
 print("longest market: {}".format(maxMarketLength))
+
+brierScore = getBrierScore(priceList)
+brierScoreProb = (1-brierScore**0.5)
+print("Brier score: {:.4f}\t Prob: {:.4f}".format(brierScore,brierScoreProb))
+brierScoreWeighted = getBrierScore(priceList,True)
+brierScoreProbWeighted = (1-brierScoreWeighted**0.5)
+print("Brier score (weighted): {:.4f}\t Prob: {:.4f}".format(brierScoreWeighted,brierScoreProbWeighted))
+
+#plt.hist(flatten(priceList),range=(0,1),bins=100,histtype='step')
+#plt.xlabel("Price")
+#plt.savefig("plots/prices.png")
+#plt.clf()
+#
+#plt.hist(flatten(priceList),weights=flatten([[1/len(x)]*len(x) for x in priceList]) ,range=(0,1),bins=100,histtype='step')
+#plt.xlabel("Price")
+#plt.savefig("plots/prices_weighted.png")
+#plt.clf()
 
 #TODO?: percentile bootstrap to BCa file:///home/nick/Downloads/casi_corrected_03052021.pdf#page=212
 #t_dot is average of statistic over jackknife samples
@@ -186,7 +215,7 @@ plt.clf()
 plt.hist(durations,histtype='step',bins=100)
 plt.xlabel("Market duration (h)")
 plt.savefig("plots/duration.png")
-#plt.show()
+##plt.show()
 plt.clf()
 
 
@@ -269,12 +298,14 @@ def plotAccuracyRelative(priceList ):
 
     error2sig = np.abs(np.vstack((np.array(lower2sigs),np.array(upper2sigs))))
 
-    plt.plot(timestamps,means,color='green',label=' Mean')
-    plt.fill_between(timestamps,means-errors[0],means+errors[1],color='green',alpha=0.3,label="$\pm1\sigma$")
-    plt.fill_between(timestamps,means-error2sig[0],means+error2sig[1],color='green',alpha=0.3,label=r"$\pm2\sigma$")
+    plt.plot(timestamps[::-1],means,color='green',label=' Mean')
+    plt.fill_between(timestamps[::-1],means-errors[0],means+errors[1],color='green',alpha=0.3,label="$\pm1\sigma$")
+    plt.fill_between(timestamps[::-1],means-error2sig[0],means+error2sig[1],color='green',alpha=0.3,label=r"$\pm2\sigma$")
     leg = plt.legend()
     leg.legend_handles[1].set_alpha(0.6)
+    plt.margins(x=0)
     plt.ylim(0,1)
+
     plt.xlabel("Time before market resolves (%)")
     plt.ylabel("Price")
     plt.savefig("plots/accuracy_relative.png")
@@ -304,6 +335,10 @@ plt.hist(brierPerMarket,bins=100,histtype='step')
 plt.savefig("plots/brier.png")
 plt.clf()
 
+plt.hist(BCE,bins=100,histtype='step')
+plt.savefig("plots/BCE.png")
+plt.clf()
+
 
 
 class Percentile:
@@ -315,23 +350,33 @@ class Percentile:
 def upperQuantile(values):
     return np.quantile(values,0.84)
 
-bins=50
-means,_,_ = scipy.stats.binned_statistic(np.log(volumeList),BCE,statistic='mean',bins=bins)
-upper,edges,_ = scipy.stats.binned_statistic(np.log(volumeList),BCE,statistic=Percentile(0.84),bins=bins)
-lower,_,_ = scipy.stats.binned_statistic(np.log(volumeList),BCE,statistic=Percentile(0.16),bins=bins)
-
+#bins=30
+#bins=[-1,0,1,2]+list(np.linspace(3,15,13))+[16,20,22]
+bins = list(range(-1,23))
+#metric = BCE
+metric = brierPerMarket
+means,_,_ = scipy.stats.binned_statistic(np.log(volumeList),metric,statistic='mean',bins=bins)
+upper,edges,_ = scipy.stats.binned_statistic(np.log(volumeList),metric,statistic=Percentile(0.84),bins=bins)
+lower,_,_ = scipy.stats.binned_statistic(np.log(volumeList),metric,statistic=Percentile(0.16),bins=bins)
 
 
 midpoints =  0.5*(edges[:-1]+edges[1:])
-plt.scatter(np.log(volumeList),BCE)
-plt.plot(midpoints,means,color='orange')
+plt.scatter(np.log(volumeList),metric,color="salmon")
+plt.xlabel("log(Market Volume)")
+plt.ylabel("Market Brier Score")
+plt.plot(midpoints,means,color='maroon',label="Mean")
 
-plt.fill_between(midpoints,lower,upper,color='orange',alpha=0.3,label=r"$\pm1\sigma$")
+#plt.fill_between(midpoints,lower,upper,color='violet',alpha=0.3,label=r"$\pm1\sigma$")
 
-m,b = np.polyfit(np.log(volumeList),BCE,1)
-plt.plot(midpoints,midpoints*m+b)
+#m,b = np.polyfit(np.log(volumeList),BCE,1)
+m,b = np.polyfit(np.log(volumeList),metric,1)
+plt.plot(midpoints,midpoints*m+b,color="dodgerblue",label="{:.3f}x+{:.3f}".format(m,b))
+plt.legend()
 #plt.yscale("log")
 #plt.scatter(volumeList,brierPerMarket)
-print("Doubling volume corresponds to {:.3f} more bits".format(m))
+#print("Doubling volume corresponds to {:.3f} more bits".format(m))
+#plt.savefig("plots/WBSvslogV.png")
+plt.savefig("plots/brierPerMarketvslogV.png")
 plt.show()
+
 #need to see quantiles of this to assess effect
