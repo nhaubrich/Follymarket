@@ -180,6 +180,45 @@ brierScoreWeighted = getBrierScore(priceList,True)
 brierScoreProbWeighted = (1-brierScoreWeighted**0.5)
 print("Brier score (weighted): {:.4f}\t Prob: {:.4f}".format(brierScoreWeighted,brierScoreProbWeighted))
 
+
+def flattenCompliment(listOfLists):
+    return [1-e for l in listOfLists for e in l]
+
+#decomposition
+#brier score is invariant to binary labeling.
+#to do decomposition, randomly pick labeling
+def cal(priceList):
+    
+    random.shuffle(priceList)
+    P1 = priceList[0:len(priceList)//2]
+    P2 = priceList[len(priceList)//2:-1]
+    
+    #take P1 as is, resolved "true"
+    #take 1-P2, resolved "false"
+
+    #weight markets by inverse length
+    w1, w2 = [[1/len(x)]*len(x) for x in P1],[[1/len(x)]*len(x) for x in P2]
+    h1,bins=np.histogram(flatten(P1),range=(0,1),bins=51,weights=flatten(w1))
+    
+    h2,bins=np.histogram(flattenCompliment(P2),range=(0,1),bins=51,weights=flatten(w2))
+    midpoints = 0.5*(bins[:-1]+bins[1:])
+    P_Y_cond_p = h1/(h1+h2)
+    P_Y = sum(h1)/sum(h1+h2)
+
+    z1=(P_Y_cond_p-midpoints)**2*h1
+    z2=(h2/(h1+h2)-midpoints[::-1])**2*h2[::-1]
+
+    CAL = sum(z1+z2 )/sum(h1+h2)
+
+    SHP = sum(  ( (P_Y_cond_p-sum(h1)/sum(h1+h2))**2*h1 + (h2/(h1+h2)-sum(h2)/sum(h1+h2))**2*h2[::-1] )/sum(h1+h2) )
+    RNG = P_Y*(1-P_Y)
+    print("CAL,SHP,RNG")
+    print(CAL,SHP,RNG)
+    print("brier")
+    print(CAL-SHP+RNG)
+    return CAL-SHP+RNG
+
+cal(priceList)
 #plt.hist(flatten(priceList),range=(0,1),bins=100,histtype='step')
 #plt.xlabel("Price")
 #plt.savefig("plots/prices.png")
