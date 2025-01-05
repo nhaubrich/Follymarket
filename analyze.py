@@ -29,6 +29,7 @@ def computeWeightedAccuracy(priceList,maxCutoff=1.0):
 
 
 def bootstrapCalibration(priceList, draws, weighted=False,maxCutoff=1.0):
+    print("Bootstrapping calibration with {} draws".format(trials))
     N = len(priceList)
     if not weighted: 
         ratios, midpoints = getCalibration(priceList)
@@ -38,7 +39,7 @@ def bootstrapCalibration(priceList, draws, weighted=False,maxCutoff=1.0):
 
     block = 100
     for i in range(0,draws,block):
-        print(i)
+        print("\t"+str(i))
         #choose indices of markets
         sampleIdxs = np.random.randint(0,N,size=(min(block,draws-i),N))
         
@@ -96,7 +97,7 @@ def plotPricesAbsoluteTime(priceList):
     plt.ylim(0,1)
     plt.xlabel("Time before market resolution (hours)")
     plt.ylabel("Price")
-    plt.savefig("plots/pricesAbsolute.png")
+    plt.savefig("plots/prices_absolute.png")
     plt.clf()
 
 def plotPricesRelativeTime(priceList,resolution=100 ):
@@ -128,7 +129,7 @@ def plotPricesRelativeTime(priceList,resolution=100 ):
 
     plt.xlabel("Time before market resolves (%)")
     plt.ylabel("Price")
-    plt.savefig("plots/accuracy_relative.png")
+    plt.savefig("plots/prices_relative.png")
     plt.clf()
 
 def flattenCompliment(listOfLists):
@@ -218,12 +219,12 @@ class PredictionMetrics:
             brierPerMarket.append(float(((1-np.array(price))**2).sum()/len(price)))
         plt.hist(brierPerMarket,bins=100,histtype='step')
         plt.xlabel("Market Brier Score (weighted)")
+        plt.yscale("log")
         plt.savefig("plots/brier.png")
         plt.clf()
 
     def getCalibrationMetrics(self,trials=500):
         ratios,midpoints = getCalibration(self.priceList) 
-        print("bootstrapping calibration with {} draws".format(trials))
         errors = bootstrapCalibration(self.priceList,trials)
 
         plt.plot(midpoints,ratios)
